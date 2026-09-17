@@ -6,6 +6,7 @@ import { connectStdio, parseCommand } from "./transport/stdio.js";
 import { connectHttp } from "./transport/http.js";
 import { loadManifest } from "./static/manifest.js";
 import { DEFAULT_LIMITS, type ProbeLimits } from "./transport/limits.js";
+import { readFile } from "node:fs/promises";
 import { renderTerminal } from "./reporters/terminal.js";
 import { renderJson } from "./reporters/json.js";
 import { renderSarif } from "./reporters/sarif.js";
@@ -88,13 +89,17 @@ OPTIONS
   --fail-on <severity>   Exit non-zero at/above this severity (default: high)
   --disable <ids>        Comma-separated rule ids to disable
   --only <ids>           Comma-separated rule ids to run exclusively
-  --token <token>        Bearer token for http transport
+  --token <token>        Bearer token for http transport (visible to ps)
+  --token-file <file>    Read the bearer token from a file (preferred)
   --header <k:v>         Extra header for http transport (repeatable)
   --sse                  Use legacy SSE transport for http
   --timeout <ms>         Deadline for the whole probe (default: 60000)
   --max-pages <n>        Max pages followed per capability (default: 100)
   --max-items <n>        Max items collected per capability (default: 10000)
   --allow-truncated      Audit a partial surface instead of failing on a bound
+
+ENVIRONMENT
+  MCP_AUDIT_TOKEN        Bearer token for http transport, if no flag is given
   --no-color             Disable colored output
   --help                 Show this help
   --version              Show version
@@ -159,6 +164,41 @@ export function overlayFlags(
   return normalizeConfig(overlay, base);
 }
 
+/**
+ * Resolve the bearer token for an http target.
+ *
+ * Order is --token-file, then MCP_AUDIT_TOKEN, then --token. A token on the
+ * command line is visible to every process on the host via `ps`, lands in shell
+ * history, and lands in CI logs, so it is accepted last and warned about rather
+ * than removed — removing it would break existing callers into doing something
+ * worse.
+ */
+export async function resolveToken(
+  flags: Record<string, CliFlag>,
+  env: NodeJS.ProcessEnv = process.env,
+  warn: (msg: string) => void = (m) => process.stderr.write(m),
+): Promise<string | undefined> {
+  const file = flags["token-file"];
+  if (typeof file === "string") {
+    const contents = await readFile(file, "utf8");
+    const token = contents.trim();
+    if (!token) throw new Error(`Token file "${file}" is empty.`);
+    return token;
+  }
+  const fromEnv = env["MCP_AUDIT_TOKEN"]?.trim();
+  if (fromEnv) return fromEnv;
+
+  const flag = flags["token"];
+  if (typeof flag === "string" && flag !== "") {
+    warn(
+      "mcp-audit: WARNING — --token is visible to other processes via `ps` and is " +
+        "recorded in shell history. Prefer --token-file or MCP_AUDIT_TOKEN.\n",
+    );
+    return flag;
+  }
+  return undefined;
+}
+
 export function collectHeaders(
   flags: Record<string, CliFlag>,
 ): Record<string, string> {
@@ -205,7 +245,7 @@ async function resolveTarget(args: CliArgs): Promise<AuditTarget> {
       return connectHttp(
         {
           url,
-          token: typeof flags["token"] === "string" ? flags["token"] : undefined,
+          token: await resolveToken(flags),
           headers: collectHeaders(flags),
           useSse: flags["sse"] === true,
         },

@@ -2,6 +2,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { AuditTarget } from "../types.js";
 import { probe } from "./probe.js";
 import { DEFAULT_LIMITS, type ProbeLimits } from "./limits.js";
+import { redactCommandLine } from "../redact.js";
 
 export interface StdioTargetOptions {
   command: string;
@@ -26,7 +27,9 @@ export async function connectStdio(
     stderr: "ignore",
   });
 
-  const source = [options.command, ...(options.args ?? [])].join(" ");
+  // The plaintext command line never reaches AuditTarget: a stdio MCP server
+  // is routinely configured with its credential in argv.
+  const source = redactCommandLine(options.command, options.args ?? []);
   return probe(transport, { kind: "stdio", source }, limits);
 }
 

@@ -43,7 +43,7 @@ SARIF output for GitHub code scanning.
 npx @royalpinto007/mcp-audit stdio "node my-mcp-server.js"
 
 # Audit a remote server over HTTP (with a bearer token)
-npx @royalpinto007/mcp-audit http https://mcp.example.com/mcp --token "$MCP_TOKEN"
+MCP_AUDIT_TOKEN="$MCP_TOKEN" npx @royalpinto007/mcp-audit http https://mcp.example.com/mcp
 
 # Lint a server's declared surface from a manifest, without running it
 npx @royalpinto007/mcp-audit static ./mcp-manifest.json
@@ -142,13 +142,17 @@ Severities, lowest to highest: `info`, `low`, `medium`, `high`, `critical`.
 --fail-on <severity>   Exit non-zero at/above this severity
 --disable <ids>        Comma-separated rule ids to disable
 --only <ids>           Comma-separated rule ids to run exclusively
---token <token>        Bearer token for http transport
+--token <token>        Bearer token for http transport (visible to ps)
+--token-file <file>    Read the bearer token from a file (preferred)
 --header <k:v>         Extra header for http transport (repeatable)
 --sse                  Use the legacy SSE transport for http
 --timeout <ms>         Deadline for the whole probe (default: 60000)
 --max-pages <n>        Max pages followed per capability (default: 100)
 --max-items <n>        Max items collected per capability (default: 10000)
 --allow-truncated      Audit a partial surface instead of failing on a bound
+
+# environment
+MCP_AUDIT_TOKEN        Bearer token for http transport, if no flag is given
 --no-color             Disable colored output
 ```
 

@@ -7,6 +7,7 @@ import type {
   ServerInfo,
   ToolSpec,
 } from "../types.js";
+import { redactUrl } from "../redact.js";
 
 /**
  * Shape of a static manifest that mcp-audit can lint without connecting. All
@@ -67,7 +68,9 @@ export function normalize(parsed: unknown, source: string): AuditTarget {
     resources: manifest.resources ?? [],
     prompts: manifest.prompts ?? [],
     connection: {
-      url: manifest.url,
+      // A manifest committed to a repo can carry a credential in its declared
+      // url just as a live target can.
+      url: manifest.url === undefined ? undefined : redactUrl(manifest.url),
       authProvided: manifest.authProvided,
     },
   };

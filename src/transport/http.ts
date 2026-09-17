@@ -4,6 +4,7 @@ import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { AuditTarget } from "../types.js";
 import { probe } from "./probe.js";
 import { DEFAULT_LIMITS, type ProbeLimits } from "./limits.js";
+import { redactUrl } from "../redact.js";
 
 export interface HttpTargetOptions {
   url: string;
@@ -37,12 +38,16 @@ export async function connectHttp(
     ? new SSEClientTransport(url, { requestInit })
     : new StreamableHTTPClientTransport(url, { requestInit });
 
+  // `url` above is what we connect with; `safeUrl` is what we record. A query
+  // string or userinfo credential must not reach a report that gets uploaded.
+  const safeUrl = redactUrl(options.url);
+
   return probe(
     transport,
     {
       kind: "http",
-      source: options.url,
-      url: options.url,
+      source: safeUrl,
+      url: safeUrl,
       authProvided,
     },
     limits,

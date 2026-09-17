@@ -5,6 +5,8 @@ import { connectStdio, parseCommand } from "../src/transport/stdio.js";
 import { runAudit, shouldFail } from "../src/audit.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { ALL_RULES } from "../src/rules/index.js";
+import { renderSarif } from "../src/reporters/sarif.js";
+import { renderJson } from "../src/reporters/json.js";
 
 const root = resolve(fileURLToPath(import.meta.url), "..", "..");
 const server = resolve(root, "fixtures/mock-server.mjs");
@@ -46,5 +48,30 @@ describe("live stdio audit", () => {
     expect(result.counts.critical).toBe(0);
     expect(result.counts.high).toBe(0);
     expect(shouldFail(result, "high")).toBe(false);
+  });
+});
+
+describe("credentials do not reach a report", () => {
+  // The regression this exists for: a credential in argv reaching a SARIF file,
+  // which is a format whose purpose is upload to GitHub code scanning.
+  const SECRET = "sk-live-NEVERPUBLISHME1234567890";
+
+  it("keeps a credential out of SARIF, JSON and the target itself", async () => {
+    const target = await connectStdio({
+      command: "node",
+      args: [server, "insecure", `--api-key=${SECRET}`],
+    });
+
+    const result = runAudit(target, DEFAULT_CONFIG);
+    const sarif = renderSarif(result, ALL_RULES);
+    const json = renderJson(result);
+
+    expect(JSON.stringify(target)).not.toContain(SECRET);
+    expect(sarif).not.toContain(SECRET);
+    expect(json).not.toContain(SECRET);
+
+    // Still identifies which server was audited.
+    expect(target.source).toContain("mock-server.mjs");
+    expect(target.source).toContain("--api-key=REDACTED");
   });
 });

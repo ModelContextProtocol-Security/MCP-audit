@@ -5,6 +5,7 @@ import type { McpAuditConfig } from "./config.js";
 import { connectStdio, parseCommand } from "./transport/stdio.js";
 import { connectHttp } from "./transport/http.js";
 import { loadManifest } from "./static/manifest.js";
+import { DEFAULT_LIMITS, type ProbeLimits } from "./transport/limits.js";
 import { renderTerminal } from "./reporters/terminal.js";
 import { renderJson } from "./reporters/json.js";
 import { renderSarif } from "./reporters/sarif.js";
@@ -90,6 +91,10 @@ OPTIONS
   --token <token>        Bearer token for http transport
   --header <k:v>         Extra header for http transport (repeatable)
   --sse                  Use legacy SSE transport for http
+  --timeout <ms>         Deadline for the whole probe (default: 60000)
+  --max-pages <n>        Max pages followed per capability (default: 100)
+  --max-items <n>        Max items collected per capability (default: 10000)
+  --allow-truncated      Audit a partial surface instead of failing on a bound
   --no-color             Disable colored output
   --help                 Show this help
   --version              Show version
@@ -99,6 +104,29 @@ EXIT CODES
   1  findings at/above --fail-on
   2  usage or runtime error
 `;
+}
+
+/** Parse a positive-integer flag, rejecting anything that is not one. */
+function positiveInt(
+  value: CliFlag | undefined,
+  flag: string,
+  fallback: number,
+): number {
+  if (value === undefined) return fallback;
+  const n = Number(String(value));
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`Invalid ${flag} "${String(value)}"; expected a positive integer.`);
+  }
+  return n;
+}
+
+export function collectLimits(flags: Record<string, CliFlag>): ProbeLimits {
+  return {
+    timeoutMs: positiveInt(flags["timeout"], "--timeout", DEFAULT_LIMITS.timeoutMs),
+    maxPages: positiveInt(flags["max-pages"], "--max-pages", DEFAULT_LIMITS.maxPages),
+    maxItems: positiveInt(flags["max-items"], "--max-items", DEFAULT_LIMITS.maxItems),
+    allowTruncated: flags["allow-truncated"] === true,
+  };
 }
 
 function csv(value: CliFlag | undefined): string[] {
@@ -163,22 +191,26 @@ function printRules(): void {
 
 async function resolveTarget(args: CliArgs): Promise<AuditTarget> {
   const { command, positional, flags } = args;
+  const limits = collectLimits(flags);
   switch (command) {
     case "stdio": {
       const cmd = positional.join(" ");
       if (!cmd) throw new Error('stdio requires a command, e.g. mcp-audit stdio "node server.js"');
       const { command: bin, args: binArgs } = parseCommand(cmd);
-      return connectStdio({ command: bin, args: binArgs });
+      return connectStdio({ command: bin, args: binArgs }, limits);
     }
     case "http": {
       const url = positional[0];
       if (!url) throw new Error("http requires a URL");
-      return connectHttp({
-        url,
-        token: typeof flags["token"] === "string" ? flags["token"] : undefined,
-        headers: collectHeaders(flags),
-        useSse: flags["sse"] === true,
-      });
+      return connectHttp(
+        {
+          url,
+          token: typeof flags["token"] === "string" ? flags["token"] : undefined,
+          headers: collectHeaders(flags),
+          useSse: flags["sse"] === true,
+        },
+        limits,
+      );
     }
     case "static": {
       const path = positional[0];
@@ -223,6 +255,13 @@ export async function main(argv: string[]): Promise<number> {
     output = renderJson(result);
   } else {
     output = renderTerminal(result, { color: flags["no-color"] !== true });
+  }
+
+  if (target.truncated?.length) {
+    process.stderr.write(
+      `mcp-audit: WARNING — the surface was truncated (${target.truncated.join(", ")}). ` +
+        `This report does not cover the whole server.\n`,
+    );
   }
 
   if (typeof flags["output"] === "string") {

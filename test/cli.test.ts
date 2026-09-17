@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { collectHeaders, main, overlayFlags, parseArgs } from "../src/cli.js";
+import { collectHeaders, main, overlayFlags, parseArgs, collectLimits } from "../src/cli.js";
+import { DEFAULT_LIMITS } from "../src/transport/limits.js";
 import { DEFAULT_CONFIG } from "../src/config.js";
 import { runAudit } from "../src/audit.js";
 import { makeTarget } from "./helpers.js";
@@ -100,5 +101,34 @@ it("rejects a header value without a colon", () => {
     ]);
 
     expect(flags.config).toBe("two.json");
+  });
+});
+
+describe("collectLimits", () => {
+  it("defaults to the shipped bounds", () => {
+    expect(collectLimits({})).toEqual(DEFAULT_LIMITS);
+  });
+  it("reads the bound flags", () => {
+    expect(
+      collectLimits({
+        timeout: "5000",
+        "max-pages": "7",
+        "max-items": "9",
+        "allow-truncated": true,
+      }),
+    ).toEqual({
+      timeoutMs: 5000,
+      maxPages: 7,
+      maxItems: 9,
+      allowTruncated: true,
+    });
+  });
+  it("rejects a non-positive or non-integer bound", () => {
+    expect(() => collectLimits({ "max-pages": "0" })).toThrow(/positive integer/);
+    expect(() => collectLimits({ timeout: "abc" })).toThrow(/positive integer/);
+    expect(() => collectLimits({ "max-items": "1.5" })).toThrow(/positive integer/);
+  });
+  it("does not truncate unless asked", () => {
+    expect(collectLimits({}).allowTruncated).toBe(false);
   });
 });

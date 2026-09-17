@@ -1,6 +1,7 @@
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { AuditTarget } from "../types.js";
 import { probe } from "./probe.js";
+import { DEFAULT_LIMITS, type ProbeLimits } from "./limits.js";
 
 export interface StdioTargetOptions {
   command: string;
@@ -15,6 +16,7 @@ export interface StdioTargetOptions {
  */
 export async function connectStdio(
   options: StdioTargetOptions,
+  limits: ProbeLimits = DEFAULT_LIMITS,
 ): Promise<AuditTarget> {
   const transport = new StdioClientTransport({
     command: options.command,
@@ -25,7 +27,7 @@ export async function connectStdio(
   });
 
   const source = [options.command, ...(options.args ?? [])].join(" ");
-  return probe(transport, { kind: "stdio", source });
+  return probe(transport, { kind: "stdio", source }, limits);
 }
 
 /**

@@ -96,6 +96,12 @@ export interface AuditTarget {
     /** Whether an auth header/token was supplied when connecting. */
     authProvided?: boolean;
   };
+  /**
+   * Capabilities whose enumeration stopped at a bound rather than at the end of
+   * the list. Only set when `--allow-truncated` was passed; otherwise a bound
+   * is an error and no target is produced.
+   */
+  truncated?: string[];
 }
 
 /** A single finding produced by a rule. */

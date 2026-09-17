@@ -145,6 +145,10 @@ Severities, lowest to highest: `info`, `low`, `medium`, `high`, `critical`.
 --token <token>        Bearer token for http transport
 --header <k:v>         Extra header for http transport (repeatable)
 --sse                  Use the legacy SSE transport for http
+--timeout <ms>         Deadline for the whole probe (default: 60000)
+--max-pages <n>        Max pages followed per capability (default: 100)
+--max-items <n>        Max items collected per capability (default: 10000)
+--allow-truncated      Audit a partial surface instead of failing on a bound
 --no-color             Disable colored output
 ```
 
